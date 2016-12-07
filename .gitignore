@@ -1,0 +1,12 @@
+Debug/
+x64/
+VCOM opencv.vcxproj.user
+VCOM opencv.vcxproj.filters
+VCOM opencv.vcxproj
+VCOM opencv.opensdf
+VCOM opencv.sdf
+VCOM opencv.sln
+VCOM opencv.v11.suo
+*.vcxproj
+*.suo
+VCOM opencv.vcxproj
