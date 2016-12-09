@@ -33,11 +33,12 @@ int main( int argc, char** argv ) {
 	
 	if (argc != 4) {
 
+		cout << endl;
 		cout << "Training images directory path: ";
 		cin >> train_img_dir;
 		cout << endl;
 
-		cout << "Training results file path: ";
+		cout << "Training images solution file path: ";
 		cin >> train_results_file_path;
 		cout << endl;
 
@@ -51,11 +52,14 @@ int main( int argc, char** argv ) {
 		test_img_dir = argv[3];
 	}
 
-	cout << "File path selected: " << train_img_dir << endl;
-
+	cout << endl;
+	cout << "Training images directory path selected: " << train_img_dir << endl;
+	cout << "Training images solution file path selected: " << train_results_file_path << endl;
+	cout << "Test images directory path selected: " << test_img_dir << endl;
+	cout << endl;
 	
 	// detecting keypoints
-	SurfFeatureDetector detector(1000);
+	SurfFeatureDetector detector(400);
 	vector<KeyPoint> keypoints;	
 	
 	// computing descriptors
@@ -64,9 +68,7 @@ int main( int argc, char** argv ) {
 	Mat training_descriptors(1,extractor->descriptorSize(),extractor->descriptorType());
 	Mat img;
 
-	cout << "------- build vocabulary ---------\n";
-
-	cout << "extract descriptors.."<<endl;
+	cout << "Building vocabulary...\n";
 	int count = 0;
 
 	HANDLE dir;
@@ -93,31 +95,31 @@ int main( int argc, char** argv ) {
 		extractor->compute(img, keypoints, descriptors);
 
 		training_descriptors.push_back(descriptors);
-		cout << ".";
+		cout << '\r' << "Total descriptors: " << training_descriptors.rows;
 
 
 	} while (FindNextFile(dir, &file_data));
 
-	cout << endl;
-
-	cout << "Total descriptors: " << training_descriptors.rows << endl;
+	cout << endl << endl;
 
 	BOWKMeansTrainer bowtrainer(150); //num clusters
 	bowtrainer.add(training_descriptors);
-	cout << "cluster BOW features" << endl;
+	cout << "Cluster Bag of Words features..." << endl;
 	Mat vocabulary = bowtrainer.cluster();
+
+	cout << endl << endl;
 
 	Ptr<DescriptorMatcher > matcher(new BruteForceMatcher<L2<float> >());
 	BOWImgDescriptorExtractor bowide(extractor,matcher);
 	bowide.setVocabulary(vocabulary);
 
 	//setup training data for classifiers
-	map<string,Mat> classes_training_data; classes_training_data.clear();
+	map<string,Mat> classes_training_data; 
+	classes_training_data.clear();
 
-	cout << "------- train SVMs ---------\n";
+	cout << "Training SVMs...\n";
 
 	Mat response_hist;
-	cout << "look in train data"<<endl;
 	count = 0;
 	char buf[255];
 	ifstream ifs(train_results_file_path);
@@ -126,13 +128,14 @@ int main( int argc, char** argv ) {
 	{
 		ifs.getline(buf, 255);
 		string line(buf);
-		cout << line << endl;
 		istringstream iss(line);
 		string id, label;
 		getline(iss, id, ',');
 		getline(iss, label);
 		
-		img = imread(train_img_dir + "\\" + id);
+		string imgpath = train_img_dir + "\\" + id + ".png";
+		img = imread(imgpath);
+		cout << '\r' << "Loading: " << imgpath;
 
 		bowide.compute(img, keypoints, response_hist);
 		
@@ -143,13 +146,17 @@ int main( int argc, char** argv ) {
 		total_samples++;
 
 	} while (!ifs.eof());
-	cout << endl;
+	cout << endl << endl;
+
+
+	cout << '\r' << "Training classes..." << endl;
 
 	//train 1-vs-all SVMs
 	map<string, Ptr<CvSVM>> classes_classifiers;
+	int num = 1;
 	for (map<string,Mat>::iterator it = classes_training_data.begin(); it != classes_training_data.end(); ++it) {
 		string class_ = (*it).first;
-		cout << "training class: " << class_ << ".." << endl;
+		cout << "#" << num++ << " " << class_ << "..." << endl;
 		
 		Mat samples(0,response_hist.cols,response_hist.type());
 		Mat labels(0,1,CV_32FC1);
@@ -171,11 +178,13 @@ int main( int argc, char** argv ) {
 		Mat samples_32f; samples.convertTo(samples_32f, CV_32F);
 
 		Ptr<CvSVM> tmp_svm = new CvSVM();
-		tmp_svm->train(samples_32f,labels);
-		classes_classifiers.insert(make_pair(class_, tmp_svm));
+		auto lastInsertPtr = classes_classifiers.insert(make_pair(class_, tmp_svm));
+		lastInsertPtr.first->second->train(samples_32f,labels);
 	}
+
+	cout << endl << endl;
 	
-	cout << "------- test ---------\n";
+	cout << "Testing...\n";
 
 	//HANDLE dir;
     //WIN32_FIND_DATA file_data;
