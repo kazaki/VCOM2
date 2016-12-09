@@ -107,7 +107,7 @@ int main( int argc, char** argv ) {
 	cout << "Cluster Bag of Words features..." << endl;
 	Mat vocabulary = bowtrainer.cluster();
 
-	cout << endl << endl;
+	cout << endl;
 
 	Ptr<DescriptorMatcher > matcher(new BruteForceMatcher<L2<float> >());
 	BOWImgDescriptorExtractor bowide(extractor,matcher);
@@ -146,10 +146,10 @@ int main( int argc, char** argv ) {
 		total_samples++;
 
 	} while (!ifs.eof());
-	cout << endl << endl;
+	cout << '\r' << endl << endl;
 
 
-	cout << '\r' << "Training classes..." << endl;
+	cout << "Training classes..." << endl;
 
 	//train 1-vs-all SVMs
 	map<string, Ptr<CvSVM>> classes_classifiers;
@@ -231,12 +231,9 @@ int main( int argc, char** argv ) {
 			cout << "class: " << (*it).first << ", response: " << res << endl;
 		}
 	} 
-
 	
-	cout << endl;
-	cout <<"Done."<<endl;
-
-
+	cout << endl << endl;
 	system("PAUSE");
+	
 	return 0;
 }
