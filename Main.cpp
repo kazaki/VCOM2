@@ -24,7 +24,6 @@ using namespace std;
 
 int main( int argc, char** argv ) {
 
-
 	Mat initial_img;
 
 	string train_img_dir, 
@@ -61,7 +60,7 @@ int main( int argc, char** argv ) {
 	clock_t begin = clock();
 	
 	// detecting keypoints
-	SurfFeatureDetector detector(800);
+	SurfFeatureDetector detector(400);
 	vector<KeyPoint> keypoints;	
 	
 	// computing descriptors
@@ -121,11 +120,10 @@ int main( int argc, char** argv ) {
 
 	cout << "Training SVMs..." << endl;
 
-	Mat_<float> response_hist;
+	Mat response_hist;
 	count = 0;
 	char buf[255];
 	ifstream ifs(train_results_file_path);
-	int total_samples = 0;
 	do
 	{
 		ifs.getline(buf, 255);
@@ -139,6 +137,7 @@ int main( int argc, char** argv ) {
 		img = imread(imgpath);
 		cout << '\r' << "Loading: " << imgpath;
 
+		keypoints.clear();
 		detector.detect(img, keypoints);
 		bowide.compute(img, keypoints, response_hist);
 		
@@ -146,10 +145,9 @@ int main( int argc, char** argv ) {
 			classes_training_data[label].create(0,response_hist.cols,response_hist.type());
 		}
 		classes_training_data[label].push_back(response_hist);
-		total_samples++;
 
 	} while (!ifs.eof());
-	cout << '\r' << endl << endl;
+	cout << '\r' << "                                           " << endl;
 
 
 	cout << "Training classes..." << endl;
@@ -179,11 +177,21 @@ int main( int argc, char** argv ) {
 			labels.push_back(class_label);
 		}
 		
-		Mat samples_32f; samples.convertTo(samples_32f, CV_32F);
+		Mat samples_32f; 
+		samples.convertTo(samples_32f, CV_32F);
 
+		/*
+		Ptr<CvSVM> tmp_svm = new CvSVM();
+		CvSVMParams params = CvSVMParams();
+		params.svm_type    = CvSVM::C_SVC;
+		auto lastInsertPtr = classes_classifiers.insert(make_pair(class_, tmp_svm));
+		lastInsertPtr.first->second->train(samples_32f,labels,Mat(),Mat(),params);
+		*/
+		
 		Ptr<CvSVM> tmp_svm = new CvSVM();
 		auto lastInsertPtr = classes_classifiers.insert(make_pair(class_, tmp_svm));
 		lastInsertPtr.first->second->train(samples_32f,labels);
+		
 	}
 
 	cout << endl;
@@ -191,73 +199,77 @@ int main( int argc, char** argv ) {
 	clock_t end = clock();
 	double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
 
-	cout << "Time elasped building vocabulary and training classes: " << elapsed_secs << endl << endl;
+	cout << "Time elasped building vocabulary and training classes: " << elapsed_secs << " seconds." << endl << endl;
 	
-	cout << "Testing..." << endl;
-
-	//HANDLE dir;
-    //WIN32_FIND_DATA file_data;
-
-	/*
-
-	/////////// MANUAL TESTING FOR NOW /////////////////
-
-    if ((dir = FindFirstFile((test_img_dir + "/*").c_str(), &file_data)) == INVALID_HANDLE_VALUE) {
-		cout << "No files found." << endl;
-		return 0;
-	}
-
-	do {
-		const string file_name = file_data.cFileName;
-		const string full_file_name = test_img_dir + "/" + file_name;
-		const bool is_directory = (file_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-
-		if (file_name[0] == '.')
-			continue;
-
-		if (is_directory)
-			continue;
-
-		img = imread(full_file_name);
-		detector.detect(img, keypoints);
-		bowide.compute(img, keypoints, response_hist);
-		//test vs. SVMs
-		for (map<string, Ptr<CvSVM>>::iterator it = classes_classifiers.begin(); it != classes_classifiers.end(); ++it) {
-			int res = (*it).second->predict(response_hist,false);
-			cout << "class: " << (*it).first << ", response: " << res << endl;
-		}
-
-
-	} while (FindNextFile(dir, &file_data));
-	*/
-
-
 	string ans;
-	while (true) {
-		cout << "File to test(q to quit): ";
-		cin >> ans;
-		if (ans.compare("q") == 0) break;
-		img = imread(test_img_dir + "/" + ans + ".png");
-		detector.detect(img, keypoints);
-		bowide.compute(img, keypoints, response_hist);
+	cout << "Please select the testing mode ([1]Manual [2]Directory): ";
+	cin >> ans;
+	if (ans.compare("1") == 0) { // MANUAL MODE
+		cout << endl << "Manual mode selected. Testing..." << endl;
 
-		if(response_hist.empty() ||  response_hist.cols <= 0 || response_hist.rows <= 0) {
-			cout << "An error occured reading the imagem. Please try again." << endl;
-			continue;
+		while (true) {
+			cout << "File to test ([q] to quit): ";
+			cin >> ans;
+			if (ans.compare("q") == 0) break;
+			img = imread(test_img_dir + "/" + ans + ".png");
+			keypoints.clear();
+			detector.detect(img, keypoints);
+
+			if(keypoints.empty()) {
+				cout << "Unable to detect any keypoints for this image." << endl;
+				continue;
+			}
+
+			bowide.compute(img, keypoints, response_hist);
+
+			for (map<string, Ptr<CvSVM>>::iterator it = classes_classifiers.begin(); it != classes_classifiers.end(); ++it) {
+				int res = (*it).second->predict(response_hist,false);
+				cout << "class: " << (*it).first << ", response: " << res << endl;
+			}
+		} 
+
+	} else { //DIRECTORY MODE
+		cout << endl << "Directory mode selected. Testing..." << endl;
+
+		if ((dir = FindFirstFile((test_img_dir + "/*").c_str(), &file_data)) == INVALID_HANDLE_VALUE) {
+			cout << "No files found." << endl;
+			return 0;
 		}
 
-		for (map<string, Ptr<CvSVM>>::iterator it = classes_classifiers.begin(); it != classes_classifiers.end(); ++it) {
-			int res = (*it).second->predict(response_hist,false);
-			cout << "class: " << (*it).first << ", response: " << res << endl;
-		}
-	} 
+		ofstream outputFile;
+		outputFile.open("submission.csv", ios::out | ios::trunc);
+		outputFile << "id,label";
+
+		do {
+			const string file_name = file_data.cFileName;
+			const string full_file_name = test_img_dir + "/" + file_name;
+			const bool is_directory = (file_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+
+			if (file_name[0] == '.')
+				continue;
+
+			if (is_directory)
+				continue;
+
+			img = imread(full_file_name);
+			keypoints.clear();
+			detector.detect(img, keypoints);
+			bowide.compute(img, keypoints, response_hist);
+
+			for (map<string, Ptr<CvSVM>>::iterator it = classes_classifiers.begin(); it != classes_classifiers.end(); ++it) {
+				int res = (*it).second->predict(response_hist,false);
+				cout << "class: " << (*it).first << ", response: " << res << endl;
+			}
+
+		} while (FindNextFile(dir, &file_data));
+	}
 	
 	cout << endl << endl;
 
 	clock_t end2 = clock();
 	elapsed_secs = double(end2 - end) / CLOCKS_PER_SEC;
 
-	cout << "Time elasped testing: " << elapsed_secs << endl << endl;
+	cout << "Time elasped testing: " << elapsed_secs << " seconds." << endl << endl;
 
 	system("PAUSE");
 	
