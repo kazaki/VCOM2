@@ -57,9 +57,11 @@ int main( int argc, char** argv ) {
 	cout << "Training images solution file path selected: " << train_results_file_path << endl;
 	cout << "Test images directory path selected: " << test_img_dir << endl;
 	cout << endl;
+
+	clock_t begin = clock();
 	
 	// detecting keypoints
-	SurfFeatureDetector detector(400);
+	SurfFeatureDetector detector(800);
 	vector<KeyPoint> keypoints;	
 	
 	// computing descriptors
@@ -68,7 +70,7 @@ int main( int argc, char** argv ) {
 	Mat training_descriptors(1,extractor->descriptorSize(),extractor->descriptorType());
 	Mat img;
 
-	cout << "Building vocabulary...\n";
+	cout << "Building vocabulary..." << endl;
 	int count = 0;
 
 	HANDLE dir;
@@ -102,9 +104,9 @@ int main( int argc, char** argv ) {
 
 	cout << endl << endl;
 
-	BOWKMeansTrainer bowtrainer(150); //num clusters
+	BOWKMeansTrainer bowtrainer(15); //num clusters
 	bowtrainer.add(training_descriptors);
-	cout << "Cluster Bag of Words features..." << endl;
+	cout << "Clustering Bag of Words features..." << endl;
 	Mat vocabulary = bowtrainer.cluster();
 
 	cout << endl;
@@ -117,9 +119,9 @@ int main( int argc, char** argv ) {
 	map<string,Mat> classes_training_data; 
 	classes_training_data.clear();
 
-	cout << "Training SVMs...\n";
+	cout << "Training SVMs..." << endl;
 
-	Mat response_hist;
+	Mat_<float> response_hist;
 	count = 0;
 	char buf[255];
 	ifstream ifs(train_results_file_path);
@@ -137,6 +139,7 @@ int main( int argc, char** argv ) {
 		img = imread(imgpath);
 		cout << '\r' << "Loading: " << imgpath;
 
+		detector.detect(img, keypoints);
 		bowide.compute(img, keypoints, response_hist);
 		
 		if(classes_training_data.count(label) == 0) {
@@ -154,6 +157,7 @@ int main( int argc, char** argv ) {
 	//train 1-vs-all SVMs
 	map<string, Ptr<CvSVM>> classes_classifiers;
 	int num = 1;
+
 	for (map<string,Mat>::iterator it = classes_training_data.begin(); it != classes_training_data.end(); ++it) {
 		string class_ = (*it).first;
 		cout << "#" << num++ << " " << class_ << "..." << endl;
@@ -182,14 +186,22 @@ int main( int argc, char** argv ) {
 		lastInsertPtr.first->second->train(samples_32f,labels);
 	}
 
-	cout << endl << endl;
+	cout << endl;
+
+	clock_t end = clock();
+	double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+
+	cout << "Time elasped building vocabulary and training classes: " << elapsed_secs << endl << endl;
 	
-	cout << "Testing...\n";
+	cout << "Testing..." << endl;
 
 	//HANDLE dir;
     //WIN32_FIND_DATA file_data;
 
 	/*
+
+	/////////// MANUAL TESTING FOR NOW /////////////////
+
     if ((dir = FindFirstFile((test_img_dir + "/*").c_str(), &file_data)) == INVALID_HANDLE_VALUE) {
 		cout << "No files found." << endl;
 		return 0;
@@ -207,10 +219,11 @@ int main( int argc, char** argv ) {
 			continue;
 
 		img = imread(full_file_name);
+		detector.detect(img, keypoints);
 		bowide.compute(img, keypoints, response_hist);
 		//test vs. SVMs
 		for (map<string, Ptr<CvSVM>>::iterator it = classes_classifiers.begin(); it != classes_classifiers.end(); ++it) {
-			float res = (*it).second->predict(response_hist,false);
+			int res = (*it).second->predict(response_hist,false);
 			cout << "class: " << (*it).first << ", response: " << res << endl;
 		}
 
@@ -225,14 +238,27 @@ int main( int argc, char** argv ) {
 		cin >> ans;
 		if (ans.compare("q") == 0) break;
 		img = imread(test_img_dir + "/" + ans + ".png");
+		detector.detect(img, keypoints);
 		bowide.compute(img, keypoints, response_hist);
+
+		if(response_hist.empty() ||  response_hist.cols <= 0 || response_hist.rows <= 0) {
+			cout << "An error occured reading the imagem. Please try again." << endl;
+			continue;
+		}
+
 		for (map<string, Ptr<CvSVM>>::iterator it = classes_classifiers.begin(); it != classes_classifiers.end(); ++it) {
-			float res = (*it).second->predict(response_hist,false);
+			int res = (*it).second->predict(response_hist,false);
 			cout << "class: " << (*it).first << ", response: " << res << endl;
 		}
 	} 
 	
 	cout << endl << endl;
+
+	clock_t end2 = clock();
+	elapsed_secs = double(end2 - end) / CLOCKS_PER_SEC;
+
+	cout << "Time elasped testing: " << elapsed_secs << endl << endl;
+
 	system("PAUSE");
 	
 	return 0;
