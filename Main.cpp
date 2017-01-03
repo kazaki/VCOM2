@@ -127,7 +127,7 @@ int main( int argc, char** argv ) {
 
 		int empty_keypoints_c = 0;
 	
-		#pragma omp parallel for schedule(dynamic,3)
+		#pragma omp parallel schedule(dynamic,3)
 		{
 			//int counter=0;
 			do {
@@ -219,6 +219,7 @@ int main( int argc, char** argv ) {
 	//BOWImgDescriptorExtractor bowide(extractor,matcher);
 	//bowide.setVocabulary(vocabulary);
 	Ptr<BOWImgDescriptorExtractor> bowide(new BOWImgDescriptorExtractor(extractor,matcher));
+	bowide->setVocabulary(vocabulary);
 	Mat response_hist;
 	string class_labels[10] = {"airplane","automobile","bird","cat","deer","dog","frog","horse","ship","truck"};
 	CvSVM svm;
@@ -226,8 +227,6 @@ int main( int argc, char** argv ) {
     if( !svm.get_support_vector_count() > 0 ) // model not loaded
     {
 		cout << "SVM Failed to read.." << endl;
-		bowide->setVocabulary(vocabulary);
-
 
 		//setup training data for classifiers
 		map<string,Mat> classes_training_data;
@@ -240,7 +239,7 @@ int main( int argc, char** argv ) {
 		char buf[255];
 		ifstream ifs(train_results_file_path);
 
-		#pragma omp parallel for schedule(dynamic,3)
+		#pragma omp parallel schedule(dynamic,3)
 		{
 			do {
 				ifs.getline(buf, 255);
@@ -390,7 +389,7 @@ int main( int argc, char** argv ) {
 			response_hist.convertTo(samples, CV_32FC1);
 			cout << "Rows in the sample: " << sample.rows << " : " << sample.cols << endl << "Rows in the histogram: " << response_hist.rows << " : " << response_hist.cols << endl;
 			int res = svm.predict(samples, false);
-			cout << "class: " << class_labels[res];
+			cout << "class: " << class_labels[res] << endl << endl;
 		} 
 
 	} else { //DIRECTORY MODE
@@ -406,7 +405,7 @@ int main( int argc, char** argv ) {
 		outputFile << "id,label\n";
 
 		
-		#pragma omp parallel for schedule(dynamic,3)
+		#pragma omp parallel schedule(dynamic,3)
 		{
 			do {
 				const string file_name = file_data.cFileName;
@@ -429,7 +428,7 @@ int main( int argc, char** argv ) {
 					//cout << "Unable to detect any keypoints for this image." << endl;
 					// sem saber poe sempre 0 :)
 					#pragma omp critical
-					outputFile << file_name << ",0" << endl;
+					outputFile << file_name << ",frog" << endl;
 					continue;
 				}
 				//bowide.compute(img, keypoints, response_hist);
@@ -441,7 +440,7 @@ int main( int argc, char** argv ) {
 				}*/
 				int res = svm.predict(response_hist);
 				#pragma omp critical
-				outputFile << file_name << "," << class_labels[res] << endl;
+				outputFile << file_name.substr(file_name.find(".png")) << "," << class_labels[res] << endl;
 
 			} while (FindNextFile(dir, &file_data));
 		}
